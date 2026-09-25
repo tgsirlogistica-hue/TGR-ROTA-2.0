@@ -27,6 +27,12 @@ button.sec{background:#333}.info{font-size:11px;color:#555;line-height:1.4;margi
   <button id="gps">MINHA LOCALIZAÇÃO</button>
   <button class="sec" id="baixar">PREPARAR PARA USO OFFLINE</button>
   <div id="msg"></div>
+  <div id="progressoBox" style="display:none;margin-top:9px">
+    <div style="height:14px;background:#ddd;border-radius:8px;overflow:hidden">
+      <div id="progressoBar" style="height:100%;width:0%;background:#c00000;transition:width .15s"></div>
+    </div>
+    <div id="progressoTxt" style="font-size:12px;margin-top:5px;font-weight:700">0%</div>
+  </div>
   <div class="info">Primeiro teste com internet. Depois que aparecer “PRONTO PARA OFFLINE”, ative o modo avião e recarregue esta página.</div>
 </div>
 
@@ -64,15 +70,31 @@ async function statusOffline(){
 
 async function prepararOffline(){
   const msg=document.getElementById('msg');
-  msg.textContent='Baixando cerca de 48 MB. Aguarde...';
+  const box=document.getElementById('progressoBox');
+  const bar=document.getElementById('progressoBar');
+  const txt=document.getElementById('progressoTxt');
+  box.style.display='block'; bar.style.width='0%'; txt.textContent='Iniciando...';
+  msg.textContent='Baixando mapa offline...';
   try{
     const reg=await navigator.serviceWorker.ready;
     const canal=new MessageChannel();
     canal.port1.onmessage=e=>{
-      if(e.data?.ok){
+      const d=e.data||{};
+      if(d.tipo==='progresso'){
+        const pct=d.total ? Math.min(100,(d.baixado/d.total)*100) : 0;
+        bar.style.width=pct.toFixed(1)+'%';
+        const mb=(d.baixado/1048576).toFixed(1);
+        const total=d.total ? (d.total/1048576).toFixed(1) : '?';
+        const vel=d.velocidade ? (d.velocidade/1048576).toFixed(2) : '0.00';
+        txt.textContent=`${pct.toFixed(1)}% — ${mb} MB / ${total} MB — ${vel} MB/s`;
+      }else if(d.ok){
+        bar.style.width='100%';
+        txt.textContent='100% — download concluído';
         msg.textContent='PRONTO PARA OFFLINE ✓';
         statusOffline();
-      }else msg.textContent='Erro: '+(e.data?.erro||'não foi possível salvar');
+      }else if(d.erro){
+        msg.textContent='Erro: '+d.erro;
+      }
     };
     (navigator.serviceWorker.controller||reg.active).postMessage({acao:'cacheMapa'},[canal.port2]);
   }catch(e){msg.textContent='Erro: '+e.message}

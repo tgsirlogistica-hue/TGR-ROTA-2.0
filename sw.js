@@ -17,12 +17,35 @@ self.addEventListener('message',e=>{
   const porta=e.ports&&e.ports[0];
   e.waitUntil((async()=>{
     try{
-      const c=await caches.open(CACHE);
       const r=await fetch(MAPA,{cache:'reload'});
       if(!r.ok)throw new Error('HTTP '+r.status);
-      await c.put(MAPA,r.clone());
+      const total=Number(r.headers.get('content-length'))||0;
+      if(!r.body)throw new Error('O navegador não forneceu fluxo de download.');
+      const reader=r.body.getReader();
+      const partes=[];
+      let baixado=0;
+      let ultimo=performance.now(), ultimoBytes=0;
+      while(true){
+        const {done,value}=await reader.read();
+        if(done)break;
+        partes.push(value);
+        baixado+=value.byteLength;
+        const agora=performance.now();
+        if(agora-ultimo>=250){
+          const velocidade=(baixado-ultimoBytes)/((agora-ultimo)/1000);
+          porta?.postMessage({tipo:'progresso',baixado,total,velocidade});
+          ultimo=agora; ultimoBytes=baixado;
+        }
+      }
+      porta?.postMessage({tipo:'progresso',baixado,total,velocidade:0});
+      const blob=new Blob(partes,{type:r.headers.get('content-type')||'application/octet-stream'});
+      const headers=new Headers(r.headers);
+      headers.set('Content-Length',String(blob.size));
+      const resposta=new Response(blob,{status:200,statusText:'OK',headers});
+      const c=await caches.open(CACHE);
+      await c.put(MAPA,resposta);
       porta?.postMessage({ok:true});
-    }catch(err){porta?.postMessage({ok:false,erro:String(err.message||err)})}
+    }catch(err){porta?.postMessage({erro:String(err.message||err)})}
   })());
 });
 
