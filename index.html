@@ -3,70 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Teste Mapa Offline TGR V3</title>
+<title>Teste Mapa Offline TGR V4</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.css">
 <style>
-html,body{height:100%;margin:0;font-family:Arial,sans-serif;background:#f2f2f2}
-body{display:flex;flex-direction:column}
-header{background:#0b8f3a;color:#fff;text-align:center;padding:16px 10px 13px;font-size:22px;font-weight:700}
-.info{padding:15px 16px 10px;background:#f2f2f2}
-.info div{margin:4px 0;font-size:14px}.online{color:#009b2e;font-weight:700}.offline{color:#c00000;font-weight:700}.ready{color:#009b2e;font-weight:700}
-#map{flex:1;min-height:380px;background:#d9d9d9}
-.controls{padding:12px 16px 18px;background:#f2f2f2}
-button{width:100%;border:0;border-radius:4px;padding:13px 10px;margin:5px 0;background:#0b8f3a;color:white;font-size:14px;font-weight:700;cursor:pointer}
-button.secondary{background:#d9d9d9;color:#111}
-#progressWrap{display:none;margin:8px 0}
-#barOuter{height:12px;background:#ddd;border-radius:8px;overflow:hidden}
-#bar{height:100%;width:0;background:#0b8f3a}
-#progressText{text-align:center;font-size:13px;margin-top:5px}
-#debug{font-size:12px;color:#555;margin-top:7px;word-break:break-word}
+html,body{height:100%;margin:0;font-family:Arial,sans-serif;background:#eef0e8}
+#map{position:absolute;inset:0;background:#eef0e8}
+.panel{position:absolute;z-index:5;top:15px;left:15px;width:380px;max-width:calc(100% - 50px);background:white;padding:16px;border-radius:14px;box-shadow:0 4px 18px #0002}
+h2{margin:0 0 8px;color:#c00000} .line{margin:7px 0}.ok{color:#07963c;font-weight:bold}.bad{color:#c00000;font-weight:bold}
+button{width:100%;padding:13px;margin-top:8px;border:0;border-radius:8px;font-weight:bold;font-size:15px;background:#d00000;color:white}
+button.alt{background:#333}
+.progress{height:16px;background:#ddd;border-radius:10px;overflow:hidden;margin-top:10px}.bar{height:100%;width:0;background:#d00000}
+#ptext,#diag{font-size:13px;margin-top:7px;word-break:break-word}
 </style>
 </head>
 <body>
-<header>TESTE MAPA OFFLINE TGR</header>
-<div class="info">
-  <div>PMTiles local: <b>mapa_tgr_200km.pmtiles</b></div>
-  <div id="net"></div>
-  <div id="cacheStatus">Verificando mapa armazenado...</div>
-</div>
 <div id="map"></div>
-<div class="controls">
-  <div id="progressWrap" style="display:block">
-    <div id="barOuter"><div id="bar"></div></div>
-    <div id="progressText">Mapa já armazenado: não é necessário baixar novamente.</div>
-  </div>
-  <button id="locate">MINHA LOCALIZAÇÃO</button>
-  <button id="prepare" class="secondary">PREPARAR PARA USO OFFLINE</button>
-  <div id="debug"></div>
+<div class="panel">
+<h2>Teste de mapa offline TGR</h2>
+<div>Versão sincronizada: <b>V4</b></div>
+<div>PMTiles: <b>mapa_tgr_200km.pmtiles</b></div>
+<div id="net" class="line"></div>
+<div id="ready" class="line">Verificando armazenamento...</div>
+<button id="loc">MINHA LOCALIZAÇÃO</button>
+<button id="prep" class="alt">PREPARAR PARA USO OFFLINE</button>
+<div class="progress"><div id="bar" class="bar"></div></div>
+<div id="ptext">Aguardando.</div>
+<div id="diag"></div>
 </div>
-
 <script src="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
 <script>
-const PM = './mapa_tgr_200km.pmtiles';
-const CACHE='tgr-offline-v2';
-const TOTAL_FALLBACK=50479235;
-const debug=document.getElementById('debug');
+const VERSION='tgr-offline-v4';
+const PM='./mapa_tgr_200km.pmtiles';
+const TOTAL=50479235;
+const $=id=>document.getElementById(id);
+function diag(t){$('diag').textContent=t}
+function network(){ $('net').className=navigator.onLine?'line ok':'line bad'; $('net').textContent=navigator.onLine?'● ONLINE':'● OFFLINE'; }
+network(); addEventListener('online',network);addEventListener('offline',network);
 
-function log(s){ debug.textContent=s; }
-function netStatus(){
- const el=document.getElementById('net');
- if(navigator.onLine){el.className='online';el.textContent='🟢 ONLINE'}
- else{el.className='offline';el.textContent='🔴 OFFLINE'}
+async function cacheCheck(){
+ const c=await caches.open(VERSION), r=await c.match(PM);
+ $('ready').className=r?'line ok':'line';
+ $('ready').textContent=r?'● PRONTO PARA OFFLINE':'● MAPA AINDA NÃO ARMAZENADO';
+ return !!r;
 }
-addEventListener('online',netStatus); addEventListener('offline',netStatus); netStatus();
 
-async function checkCache(){
- const c=await caches.open(CACHE);
- const r=await c.match(PM);
- const el=document.getElementById('cacheStatus');
- if(r){el.className='ready';el.textContent='🟢 PRONTO PARA OFFLINE'}
- else{el.className='';el.textContent='🟡 Mapa ainda não armazenado'}
-}
-checkCache();
-
-if('serviceWorker' in navigator){
- navigator.serviceWorker.register('./sw.js').catch(e=>log('Service Worker: '+e.message));
+async function registerSW(){
+ if(!('serviceWorker' in navigator)) return;
+ try{
+   await navigator.serviceWorker.register('./sw.js?v=4',{scope:'./'});
+   await navigator.serviceWorker.ready;
+ }catch(e){ diag('Service Worker: '+e.message); }
 }
 
 const protocol=new pmtiles.Protocol();
@@ -74,70 +61,52 @@ maplibregl.addProtocol('pmtiles',protocol.tile);
 
 const style={
  version:8,
- sources:{
-   tgr:{type:'vector',url:'pmtiles://'+new URL(PM,location.href).href}
- },
+ sources:{tgr:{type:'vector',url:'pmtiles://'+new URL(PM,location.href).href}},
  layers:[
-   {id:'background',type:'background',paint:{'background-color':'#eef0e8'}},
-   {id:'earth',type:'fill',source:'tgr','source-layer':'earth',paint:{'fill-color':'#f3f0e6'}},
-   {id:'landcover',type:'fill',source:'tgr','source-layer':'landcover',paint:{'fill-color':'#dfe8d5','fill-opacity':0.45}},
-   {id:'landuse',type:'fill',source:'tgr','source-layer':'landuse',paint:{'fill-color':'#e5e3d8','fill-opacity':0.5}},
-   {id:'water',type:'fill',source:'tgr','source-layer':'water',paint:{'fill-color':'#a8cce5'}},
-   {id:'boundaries',type:'line',source:'tgr','source-layer':'boundaries',paint:{'line-color':'#aaa','line-width':1,'line-dasharray':[3,2]}},
-   {id:'roads-casing',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#c6bfae','line-width':['interpolate',['linear'],['zoom'],5,1,10,3,15,8]}},
-   {id:'roads',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#ffffff','line-width':['interpolate',['linear'],['zoom'],5,0.6,10,2,15,6]}},
-   {id:'buildings',type:'fill',source:'tgr','source-layer':'buildings',minzoom:13,paint:{'fill-color':'#d0c8bd','fill-outline-color':'#b5ada3'}}
+  {id:'bg',type:'background',paint:{'background-color':'#eef0e8'}},
+  {id:'earth',type:'fill',source:'tgr','source-layer':'earth',paint:{'fill-color':'#f4f0e6'}},
+  {id:'landuse',type:'fill',source:'tgr','source-layer':'landuse',paint:{'fill-color':'#e0ead5','fill-opacity':.55}},
+  {id:'water',type:'fill',source:'tgr','source-layer':'water',paint:{'fill-color':'#9ecae1'}},
+  {id:'roads-outline',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#b7ae9e','line-width':['interpolate',['linear'],['zoom'],5,1,10,3,15,9]}},
+  {id:'roads',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#fff','line-width':['interpolate',['linear'],['zoom'],5,.6,10,2,15,6]}},
+  {id:'buildings',type:'fill',source:'tgr','source-layer':'buildings',minzoom:13,paint:{'fill-color':'#cfc6bb','fill-outline-color':'#aaa096'}}
  ]
 };
 
 let map;
 try{
- map=new maplibregl.Map({
-   container:'map',
-   style,
-   center:[-41.85261931399753,-11.295674247278528],
-   zoom:7.2,
-   attributionControl:false
- });
- map.addControl(new maplibregl.NavigationControl(),'top-right');
- map.on('load',()=>log('Mapa carregado. Se as ruas aparecerem, teste depois em modo avião.'));
- map.on('error',e=>{ if(e && e.error) log('Erro do mapa: '+e.error.message); });
-}catch(e){log('Erro ao iniciar mapa: '+e.message)}
+ map=new maplibregl.Map({container:'map',style,center:[-41.85261931399753,-11.295674247278528],zoom:8});
+ map.addControl(new maplibregl.NavigationControl(),'bottom-right');
+ map.on('load',()=>diag('Mapa iniciado. Verifique se ruas e água estão visíveis.'));
+ map.on('error',e=>diag('ERRO MAPA: '+(e.error?.message||e.message||'erro desconhecido')));
+}catch(e){diag('ERRO AO INICIAR: '+e.message)}
 
-document.getElementById('locate').onclick=()=>{
- if(!navigator.geolocation){log('Geolocalização não disponível.');return}
- navigator.geolocation.getCurrentPosition(p=>{
-   const ll=[p.coords.longitude,p.coords.latitude];
-   new maplibregl.Marker().setLngLat(ll).addTo(map);
-   map.flyTo({center:ll,zoom:14});
- },e=>log('GPS: '+e.message),{enableHighAccuracy:true,timeout:15000});
-};
+$('loc').onclick=()=>navigator.geolocation.getCurrentPosition(p=>{
+ const ll=[p.coords.longitude,p.coords.latitude];
+ new maplibregl.Marker().setLngLat(ll).addTo(map); map.flyTo({center:ll,zoom:14});
+},e=>diag('GPS: '+e.message),{enableHighAccuracy:true,timeout:15000});
 
-document.getElementById('prepare').onclick=async()=>{
- const wrap=document.getElementById('progressWrap'),bar=document.getElementById('bar'),txt=document.getElementById('progressText');
- wrap.style.display='block'; bar.style.width='0%'; txt.textContent='Iniciando...';
+$('prep').onclick=async()=>{
  try{
-   const resp=await fetch(PM+'?download='+Date.now(),{cache:'no-store'});
-   if(!resp.ok) throw new Error('HTTP '+resp.status);
-   const total=Number(resp.headers.get('content-length'))||TOTAL_FALLBACK;
-   const reader=resp.body.getReader(),chunks=[]; let got=0; const start=performance.now();
-   while(true){
-     const {done,value}=await reader.read(); if(done)break;
-     chunks.push(value); got+=value.byteLength;
-     const pct=Math.min(100,got/total*100);
-     const secs=(performance.now()-start)/1000;
-     const speed=secs?got/1048576/secs:0;
-     bar.style.width=pct.toFixed(1)+'%';
-     txt.textContent=`${pct.toFixed(1)}% — ${(got/1048576).toFixed(1)} MB / ${(total/1048576).toFixed(1)} MB — ${speed.toFixed(2)} MB/s`;
-   }
-   const blob=new Blob(chunks,{type:'application/octet-stream'});
-   const c=await caches.open(CACHE);
-   await c.put(PM,new Response(blob,{headers:{'Content-Type':'application/octet-stream','Content-Length':String(blob.size)}}));
-   bar.style.width='100%'; txt.textContent=`100% — ${(blob.size/1048576).toFixed(1)} MB armazenados`;
-   await checkCache();
-   log('Mapa armazenado. Recarregue a página e depois teste sem internet.');
- }catch(e){log('Falha ao preparar offline: '+e.message)}
+  $('ptext').textContent='Iniciando download...'; $('bar').style.width='0%';
+  const r=await fetch(PM+'?full='+Date.now(),{cache:'no-store'});
+  if(!r.ok)throw Error('HTTP '+r.status);
+  const total=Number(r.headers.get('content-length'))||TOTAL, reader=r.body.getReader(), chunks=[];
+  let got=0, t0=performance.now();
+  while(true){
+   const x=await reader.read(); if(x.done)break; chunks.push(x.value);got+=x.value.byteLength;
+   const pct=Math.min(100,got/total*100), sec=(performance.now()-t0)/1000;
+   $('bar').style.width=pct+'%';
+   $('ptext').textContent=`${pct.toFixed(1)}% — ${(got/1048576).toFixed(1)} MB / ${(total/1048576).toFixed(1)} MB — ${(got/1048576/sec).toFixed(2)} MB/s`;
+  }
+  const blob=new Blob(chunks,{type:'application/octet-stream'});
+  const c=await caches.open(VERSION);
+  await c.put(PM,new Response(blob,{headers:{'Content-Type':'application/octet-stream','Content-Length':String(blob.size),'Accept-Ranges':'bytes'}}));
+  $('bar').style.width='100%';$('ptext').textContent=`100% — ${(blob.size/1048576).toFixed(1)} MB armazenados`;
+  await cacheCheck();diag('Download concluído. Recarregue uma vez antes do teste offline.');
+ }catch(e){diag('ERRO DOWNLOAD: '+e.message)}
 };
+
+(async()=>{await registerSW();await cacheCheck()})();
 </script>
-</body>
-</html>
+</body></html>
