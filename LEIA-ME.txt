@@ -1,0 +1,20 @@
+TESTE MAPA OFFLINE TGR
+
+Arquivos:
+- index.html
+- sw.js
+- mapa_tgr_200km.pmtiles
+
+IMPORTANTE:
+Este teste deve ser aberto por HTTPS (ex.: GitHub Pages). Abrir index.html diretamente por file:// não permite Service Worker.
+
+PASSOS:
+1. Crie uma pasta de teste no GitHub Pages e envie os 3 arquivos.
+2. Abra index.html no celular COM internet.
+3. Toque em PREPARAR PARA USO OFFLINE e espere PRONTO PARA OFFLINE.
+4. Toque em MINHA LOCALIZAÇÃO e autorize o GPS.
+5. Ative modo avião.
+6. Recarregue a página.
+7. Verifique se as ruas continuam aparecendo e se MINHA LOCALIZAÇÃO continua funcionando.
+
+Este protótipo não altera o roteirizador nem o app de motoristas.

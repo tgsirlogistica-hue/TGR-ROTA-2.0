@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Teste Mapa Offline TGR</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.css">
+<style>
+html,body,#map{height:100%;margin:0;font-family:Arial,sans-serif}
+#map{background:#eef0ea}
+.painel{position:absolute;z-index:10;top:12px;left:12px;width:min(330px,calc(100vw - 24px));background:#fff;padding:13px;border-radius:12px;box-shadow:0 3px 16px #0004;box-sizing:border-box}
+h3{margin:0 0 5px;color:#b90000}.sub{font-size:12px;color:#666;margin-bottom:10px}
+.status{display:flex;gap:7px;align-items:center;font-size:13px;margin:6px 0}.bolinha{width:10px;height:10px;border-radius:50%;background:#999}.ok{background:#169b45}.erro{background:#c00000}.aviso{background:#e7a300}
+button{width:100%;border:0;border-radius:8px;padding:11px;font-weight:700;cursor:pointer;margin-top:7px;background:#c00000;color:#fff}
+button.sec{background:#333}.info{font-size:11px;color:#555;line-height:1.4;margin-top:9px}
+#msg{font-size:12px;font-weight:700;margin-top:8px}
+.markerGPS{width:18px;height:18px;background:#1976d2;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 3px #1976d255}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="painel">
+  <h3>Teste de mapa offline TGR</h3>
+  <div class="sub">Este arquivo usa o mapa_tgr_200km.pmtiles.</div>
+  <div class="status"><span id="redeDot" class="bolinha"></span><span id="redeTxt">Verificando conexão...</span></div>
+  <div class="status"><span id="cacheDot" class="bolinha"></span><span id="cacheTxt">Preparando mapa offline...</span></div>
+  <button id="gps">MINHA LOCALIZAÇÃO</button>
+  <button class="sec" id="baixar">PREPARAR PARA USO OFFLINE</button>
+  <div id="msg"></div>
+  <div class="info">Primeiro teste com internet. Depois que aparecer “PRONTO PARA OFFLINE”, ative o modo avião e recarregue esta página.</div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
+<script>
+const MAPA='mapa_tgr_200km.pmtiles';
+let mapa, gpsMarker;
+
+function rede(){
+  const on=navigator.onLine;
+  document.getElementById('redeDot').className='bolinha '+(on?'ok':'erro');
+  document.getElementById('redeTxt').textContent=on?'ONLINE':'OFFLINE';
+}
+addEventListener('online',rede); addEventListener('offline',rede); rede();
+
+async function statusOffline(){
+  if(!('serviceWorker' in navigator)){
+    document.getElementById('cacheTxt').textContent='Service Worker não suportado';
+    document.getElementById('cacheDot').className='bolinha erro'; return;
+  }
+  try{
+    await navigator.serviceWorker.register('./sw.js');
+    await navigator.serviceWorker.ready;
+    const c=await caches.open('tgr-offline-v1');
+    const r=await c.match(MAPA,{ignoreSearch:true});
+    const pronto=!!r;
+    document.getElementById('cacheDot').className='bolinha '+(pronto?'ok':'aviso');
+    document.getElementById('cacheTxt').textContent=pronto?'PRONTO PARA OFFLINE':'Mapa ainda não foi salvo offline';
+  }catch(e){
+    document.getElementById('cacheTxt').textContent='Falha ao preparar offline';
+    document.getElementById('cacheDot').className='bolinha erro';
+  }
+}
+
+async function prepararOffline(){
+  const msg=document.getElementById('msg');
+  msg.textContent='Baixando cerca de 48 MB. Aguarde...';
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    const canal=new MessageChannel();
+    canal.port1.onmessage=e=>{
+      if(e.data?.ok){
+        msg.textContent='PRONTO PARA OFFLINE ✓';
+        statusOffline();
+      }else msg.textContent='Erro: '+(e.data?.erro||'não foi possível salvar');
+    };
+    (navigator.serviceWorker.controller||reg.active).postMessage({acao:'cacheMapa'},[canal.port2]);
+  }catch(e){msg.textContent='Erro: '+e.message}
+}
+document.getElementById('baixar').onclick=prepararOffline;
+
+const protocol=new pmtiles.Protocol();
+maplibregl.addProtocol('pmtiles',protocol.tile);
+const arquivo=new pmtiles.PMTiles(MAPA);
+protocol.add(arquivo);
+
+arquivo.getHeader().then(h=>{
+  mapa=new maplibregl.Map({
+    container:'map',
+    center:[h.centerLon,h.centerLat],
+    zoom:Math.max(7,Math.min(12,h.maxZoom-3)),
+    maxZoom:19,
+    style:{
+      version:8,
+      sources:{tgr:{type:'vector',url:'pmtiles://'+MAPA,attribution:'© OpenStreetMap contributors'}},
+      layers:[
+        {id:'fundo',type:'background',paint:{'background-color':'#eef0ea'}},
+        {id:'agua',type:'fill',source:'tgr','source-layer':'water',paint:{'fill-color':'#b9d9ec'}},
+        {id:'terra',type:'fill',source:'tgr','source-layer':'landuse',paint:{'fill-color':'#e7eadf','fill-opacity':0.55}},
+        {id:'predios',type:'fill',source:'tgr','source-layer':'buildings',minzoom:13,paint:{'fill-color':'#d7d1c8','fill-outline-color':'#c3bbb0'}},
+        {id:'ruas-base',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#ffffff','line-width':['interpolate',['linear'],['zoom'],7,1,12,2.5,16,7]}},
+        {id:'ruas-contorno',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#a9a9a9','line-width':['interpolate',['linear'],['zoom'],7,.35,12,.8,16,1.5]}}
+      ]
+    }
+  });
+  mapa.addControl(new maplibregl.NavigationControl(),'bottom-right');
+}).catch(e=>{
+  document.getElementById('msg').textContent='Erro ao abrir PMTiles: '+e.message;
+});
+
+document.getElementById('gps').onclick=()=>{
+  if(!navigator.geolocation)return alert('GPS não disponível neste navegador.');
+  document.getElementById('msg').textContent='Buscando localização...';
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const c=[pos.coords.longitude,pos.coords.latitude];
+    if(!gpsMarker){
+      const el=document.createElement('div'); el.className='markerGPS';
+      gpsMarker=new maplibregl.Marker({element:el}).setLngLat(c).addTo(mapa);
+    }else gpsMarker.setLngLat(c);
+    mapa.flyTo({center:c,zoom:15});
+    document.getElementById('msg').textContent='Localização encontrada. Precisão aproximada: '+Math.round(pos.coords.accuracy)+' m';
+  },err=>document.getElementById('msg').textContent='GPS: '+err.message,{enableHighAccuracy:true,timeout:15000,maximumAge:5000});
+};
+
+statusOffline();
+</script>
+</body>
+</html>
