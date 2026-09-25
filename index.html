@@ -3,110 +3,128 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Teste Mapa Offline TGR V4</title>
+<title>Teste Mapa Offline TGR V5</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.css">
 <style>
 html,body{height:100%;margin:0;font-family:Arial,sans-serif;background:#eef0e8}
 #map{position:absolute;inset:0;background:#eef0e8}
-.panel{position:absolute;z-index:5;top:15px;left:15px;width:380px;max-width:calc(100% - 50px);background:white;padding:16px;border-radius:14px;box-shadow:0 4px 18px #0002}
-h2{margin:0 0 8px;color:#c00000} .line{margin:7px 0}.ok{color:#07963c;font-weight:bold}.bad{color:#c00000;font-weight:bold}
-button{width:100%;padding:13px;margin-top:8px;border:0;border-radius:8px;font-weight:bold;font-size:15px;background:#d00000;color:white}
-button.alt{background:#333}
-.progress{height:16px;background:#ddd;border-radius:10px;overflow:hidden;margin-top:10px}.bar{height:100%;width:0;background:#d00000}
-#ptext,#diag{font-size:13px;margin-top:7px;word-break:break-word}
+.panel{position:absolute;z-index:5;top:15px;left:15px;width:390px;max-width:calc(100% - 50px);background:#fff;padding:16px;border-radius:14px;box-shadow:0 4px 18px #0002}
+h2{margin:0 0 8px;color:#c00000}.line{margin:6px 0}.ok{color:#07963c;font-weight:700}.bad{color:#c00000;font-weight:700}.warn{color:#9a6500;font-weight:700}
+button{width:100%;padding:13px;margin-top:8px;border:0;border-radius:8px;font-weight:700;font-size:15px;background:#d00000;color:#fff}
+button.alt{background:#333}.progress{height:16px;background:#ddd;border-radius:10px;overflow:hidden;margin-top:10px}.bar{height:100%;width:0;background:#d00000}
+#ptext,#diag,#swstatus{font-size:13px;margin-top:7px;word-break:break-word}
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div class="panel">
 <h2>Teste de mapa offline TGR</h2>
-<div>Versão sincronizada: <b>V4</b></div>
+<div>Versão sincronizada: <b>V5</b></div>
 <div>PMTiles: <b>mapa_tgr_200km.pmtiles</b></div>
 <div id="net" class="line"></div>
-<div id="ready" class="line">Verificando armazenamento...</div>
+<div id="cacheStatus" class="line warn">● VERIFICANDO ARMAZENAMENTO...</div>
+<div id="swstatus">Service Worker: verificando em paralelo...</div>
 <button id="loc">MINHA LOCALIZAÇÃO</button>
 <button id="prep" class="alt">PREPARAR PARA USO OFFLINE</button>
 <div class="progress"><div id="bar" class="bar"></div></div>
 <div id="ptext">Aguardando.</div>
-<div id="diag"></div>
+<div id="diag">Mapa: iniciando independentemente do Service Worker...</div>
 </div>
+
 <script src="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
 <script>
-const VERSION='tgr-offline-v4';
-const PM='./mapa_tgr_200km.pmtiles';
-const TOTAL=50479235;
+const CACHE='tgr-offline-v5', PM='./mapa_tgr_200km.pmtiles', TOTAL=50479235;
 const $=id=>document.getElementById(id);
-function diag(t){$('diag').textContent=t}
-function network(){ $('net').className=navigator.onLine?'line ok':'line bad'; $('net').textContent=navigator.onLine?'● ONLINE':'● OFFLINE'; }
-network(); addEventListener('online',network);addEventListener('offline',network);
+function network(){
+ const e=$('net'); e.className=navigator.onLine?'line ok':'line bad';
+ e.textContent=navigator.onLine?'● ONLINE':'● OFFLINE';
+}
+network(); addEventListener('online',network); addEventListener('offline',network);
 
 async function cacheCheck(){
- const c=await caches.open(VERSION), r=await c.match(PM);
- $('ready').className=r?'line ok':'line';
- $('ready').textContent=r?'● PRONTO PARA OFFLINE':'● MAPA AINDA NÃO ARMAZENADO';
- return !!r;
-}
-
-async function registerSW(){
- if(!('serviceWorker' in navigator)) return;
  try{
-   await navigator.serviceWorker.register('./sw.js?v=4',{scope:'./'});
-   await navigator.serviceWorker.ready;
- }catch(e){ diag('Service Worker: '+e.message); }
+  const c=await caches.open(CACHE), r=await c.match(PM);
+  const e=$('cacheStatus');
+  e.className=r?'line ok':'line warn';
+  e.textContent=r?'● PRONTO PARA OFFLINE':'● MAPA AINDA NÃO ARMAZENADO';
+ }catch(err){
+  $('cacheStatus').className='line bad';
+  $('cacheStatus').textContent='● ERRO AO VERIFICAR CACHE: '+err.message;
+ }
 }
 
-const protocol=new pmtiles.Protocol();
-maplibregl.addProtocol('pmtiles',protocol.tile);
+/* SW é deliberadamente paralelo: nunca bloqueia o mapa. */
+if('serviceWorker' in navigator){
+ navigator.serviceWorker.register('./sw.js?v=5',{scope:'./'})
+ .then(()=>{$('swstatus').textContent='Service Worker: registrado.'})
+ .catch(e=>{$('swstatus').textContent='Service Worker: ERRO — '+e.message});
+}else $('swstatus').textContent='Service Worker: não suportado neste navegador.';
 
-const style={
- version:8,
- sources:{tgr:{type:'vector',url:'pmtiles://'+new URL(PM,location.href).href}},
- layers:[
-  {id:'bg',type:'background',paint:{'background-color':'#eef0e8'}},
-  {id:'earth',type:'fill',source:'tgr','source-layer':'earth',paint:{'fill-color':'#f4f0e6'}},
-  {id:'landuse',type:'fill',source:'tgr','source-layer':'landuse',paint:{'fill-color':'#e0ead5','fill-opacity':.55}},
-  {id:'water',type:'fill',source:'tgr','source-layer':'water',paint:{'fill-color':'#9ecae1'}},
-  {id:'roads-outline',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#b7ae9e','line-width':['interpolate',['linear'],['zoom'],5,1,10,3,15,9]}},
-  {id:'roads',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#fff','line-width':['interpolate',['linear'],['zoom'],5,.6,10,2,15,6]}},
-  {id:'buildings',type:'fill',source:'tgr','source-layer':'buildings',minzoom:13,paint:{'fill-color':'#cfc6bb','fill-outline-color':'#aaa096'}}
- ]
-};
+cacheCheck();
 
-let map;
+/* O mapa inicia imediatamente, sem await do SW/cache. */
 try{
- map=new maplibregl.Map({container:'map',style,center:[-41.85261931399753,-11.295674247278528],zoom:8});
- map.addControl(new maplibregl.NavigationControl(),'bottom-right');
- map.on('load',()=>diag('Mapa iniciado. Verifique se ruas e água estão visíveis.'));
- map.on('error',e=>diag('ERRO MAPA: '+(e.error?.message||e.message||'erro desconhecido')));
-}catch(e){diag('ERRO AO INICIAR: '+e.message)}
+ if(typeof maplibregl==='undefined') throw Error('MapLibre não carregou.');
+ if(typeof pmtiles==='undefined') throw Error('PMTiles JS não carregou.');
+ const protocol=new pmtiles.Protocol();
+ maplibregl.addProtocol('pmtiles',protocol.tile);
 
-$('loc').onclick=()=>navigator.geolocation.getCurrentPosition(p=>{
- const ll=[p.coords.longitude,p.coords.latitude];
- new maplibregl.Marker().setLngLat(ll).addTo(map); map.flyTo({center:ll,zoom:14});
-},e=>diag('GPS: '+e.message),{enableHighAccuracy:true,timeout:15000});
+ const sourceURL='pmtiles://'+new URL(PM,location.href).href;
+ const style={
+  version:8,
+  sources:{tgr:{type:'vector',url:sourceURL}},
+  layers:[
+   {id:'bg',type:'background',paint:{'background-color':'#eef0e8'}},
+   {id:'earth',type:'fill',source:'tgr','source-layer':'earth',paint:{'fill-color':'#f4f0e6'}},
+   {id:'landcover',type:'fill',source:'tgr','source-layer':'landcover',paint:{'fill-color':'#dce8d2','fill-opacity':.45}},
+   {id:'landuse',type:'fill',source:'tgr','source-layer':'landuse',paint:{'fill-color':'#e7e3d6','fill-opacity':.5}},
+   {id:'water',type:'fill',source:'tgr','source-layer':'water',paint:{'fill-color':'#9ecae1'}},
+   {id:'road-outline',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#b5aa99','line-width':['interpolate',['linear'],['zoom'],5,1,10,3,15,9]}},
+   {id:'road',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#fff','line-width':['interpolate',['linear'],['zoom'],5,.6,10,2,15,6]}},
+   {id:'building',type:'fill',source:'tgr','source-layer':'buildings',minzoom:13,paint:{'fill-color':'#cfc6bb','fill-outline-color':'#aaa096'}}
+  ]
+ };
+
+ window.tgrMap=new maplibregl.Map({
+  container:'map',style,
+  center:[-41.85261931399753,-11.295674247278528],zoom:8,
+  attributionControl:false
+ });
+ tgrMap.addControl(new maplibregl.NavigationControl(),'bottom-right');
+ tgrMap.on('load',()=>{$('diag').textContent='Mapa: estilo carregado. Verifique ruas, água e terreno.'});
+ tgrMap.on('error',e=>{$('diag').textContent='MAPA ERRO: '+(e.error?.message||e.message||'erro desconhecido')});
+}catch(e){$('diag').textContent='MAPA ERRO AO INICIAR: '+e.message}
+
+$('loc').onclick=()=>{
+ if(!navigator.geolocation){$('diag').textContent='GPS não disponível.';return}
+ navigator.geolocation.getCurrentPosition(p=>{
+  const ll=[p.coords.longitude,p.coords.latitude];
+  new maplibregl.Marker().setLngLat(ll).addTo(tgrMap);
+  tgrMap.flyTo({center:ll,zoom:14});
+ },e=>$('diag').textContent='GPS ERRO: '+e.message,{enableHighAccuracy:true,timeout:15000});
+};
 
 $('prep').onclick=async()=>{
  try{
-  $('ptext').textContent='Iniciando download...'; $('bar').style.width='0%';
+  $('ptext').textContent='Iniciando download...';$('bar').style.width='0%';
   const r=await fetch(PM+'?full='+Date.now(),{cache:'no-store'});
   if(!r.ok)throw Error('HTTP '+r.status);
   const total=Number(r.headers.get('content-length'))||TOTAL, reader=r.body.getReader(), chunks=[];
-  let got=0, t0=performance.now();
+  let got=0,t0=performance.now();
   while(true){
-   const x=await reader.read(); if(x.done)break; chunks.push(x.value);got+=x.value.byteLength;
-   const pct=Math.min(100,got/total*100), sec=(performance.now()-t0)/1000;
+   const x=await reader.read();if(x.done)break;chunks.push(x.value);got+=x.value.byteLength;
+   const pct=Math.min(100,got/total*100),sec=Math.max(.001,(performance.now()-t0)/1000);
    $('bar').style.width=pct+'%';
    $('ptext').textContent=`${pct.toFixed(1)}% — ${(got/1048576).toFixed(1)} MB / ${(total/1048576).toFixed(1)} MB — ${(got/1048576/sec).toFixed(2)} MB/s`;
   }
   const blob=new Blob(chunks,{type:'application/octet-stream'});
-  const c=await caches.open(VERSION);
+  const c=await caches.open(CACHE);
   await c.put(PM,new Response(blob,{headers:{'Content-Type':'application/octet-stream','Content-Length':String(blob.size),'Accept-Ranges':'bytes'}}));
   $('bar').style.width='100%';$('ptext').textContent=`100% — ${(blob.size/1048576).toFixed(1)} MB armazenados`;
-  await cacheCheck();diag('Download concluído. Recarregue uma vez antes do teste offline.');
- }catch(e){diag('ERRO DOWNLOAD: '+e.message)}
+  await cacheCheck();
+ }catch(e){$('ptext').textContent='ERRO DOWNLOAD: '+e.message}
 };
-
-(async()=>{await registerSW();await cacheCheck()})();
 </script>
-</body></html>
+</body>
+</html>
