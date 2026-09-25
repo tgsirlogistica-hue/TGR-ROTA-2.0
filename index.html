@@ -23,7 +23,7 @@ button.secondary{background:#d9d9d9;color:#111}
 </style>
 </head>
 <body>
-<header>TESTE MAPA OFFLINE TGR — V3</header>
+<header>TESTE MAPA OFFLINE TGR</header>
 <div class="info">
   <div>PMTiles local: <b>mapa_tgr_200km.pmtiles</b></div>
   <div id="net"></div>
@@ -31,9 +31,9 @@ button.secondary{background:#d9d9d9;color:#111}
 </div>
 <div id="map"></div>
 <div class="controls">
-  <div id="progressWrap">
+  <div id="progressWrap" style="display:block">
     <div id="barOuter"><div id="bar"></div></div>
-    <div id="progressText"></div>
+    <div id="progressText">Mapa já armazenado: não é necessário baixar novamente.</div>
   </div>
   <button id="locate">MINHA LOCALIZAÇÃO</button>
   <button id="prepare" class="secondary">PREPARAR PARA USO OFFLINE</button>
@@ -44,7 +44,7 @@ button.secondary{background:#d9d9d9;color:#111}
 <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
 <script>
 const PM = './mapa_tgr_200km.pmtiles';
-const CACHE='tgr-offline-v3';
+const CACHE='tgr-offline-v2';
 const TOTAL_FALLBACK=50479235;
 const debug=document.getElementById('debug');
 
@@ -86,12 +86,7 @@ const style={
    {id:'boundaries',type:'line',source:'tgr','source-layer':'boundaries',paint:{'line-color':'#aaa','line-width':1,'line-dasharray':[3,2]}},
    {id:'roads-casing',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#c6bfae','line-width':['interpolate',['linear'],['zoom'],5,1,10,3,15,8]}},
    {id:'roads',type:'line',source:'tgr','source-layer':'roads',paint:{'line-color':'#ffffff','line-width':['interpolate',['linear'],['zoom'],5,0.6,10,2,15,6]}},
-   {id:'buildings',type:'fill',source:'tgr','source-layer':'buildings',minzoom:13,paint:{'fill-color':'#d0c8bd','fill-outline-color':'#b5ada3'}},
-   {id:'places',type:'symbol',source:'tgr','source-layer':'places',layout:{
-      'text-field':['coalesce',['get','name:pt'],['get','name'],''],
-      'text-size':['interpolate',['linear'],['zoom'],5,11,12,15],
-      'text-font':['Open Sans Regular']
-    },paint:{'text-color':'#333','text-halo-color':'#fff','text-halo-width':1.5}}
+   {id:'buildings',type:'fill',source:'tgr','source-layer':'buildings',minzoom:13,paint:{'fill-color':'#d0c8bd','fill-outline-color':'#b5ada3'}}
  ]
 };
 
