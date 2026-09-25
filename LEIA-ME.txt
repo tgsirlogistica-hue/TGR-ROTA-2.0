@@ -1,20 +1,21 @@
-TESTE MAPA OFFLINE TGR
+TGR - TESTE CORRIGIDO DO MAPA 200 KM
 
-Arquivos:
+Esta versão foi refeita a partir do index.html restaurado.
+
+Mudanças desta versão:
+1. Usa o endereço e a versão do protomaps-leaflet indicados na documentação oficial.
+2. Testa se mapa_tgr_200km.pmtiles pode ser acessado pelo navegador.
+3. Se o PMTiles falhar, mostra automaticamente o mapa online antigo como segurança.
+4. Mostra na tela inicial se o mapa de 200 km carregou ou se entrou o mapa de segurança.
+5. Recoloca o botão ATUALIZAR SISTEMA.
+6. Não usa Service Worker/PWA nesta etapa.
+
+UPLOAD NO GITHUB:
 - index.html
-- sw.js
 - mapa_tgr_200km.pmtiles
 
-IMPORTANTE:
-Este teste deve ser aberto por HTTPS (ex.: GitHub Pages). Abrir index.html diretamente por file:// não permite Service Worker.
-
-PASSOS:
-1. Crie uma pasta de teste no GitHub Pages e envie os 3 arquivos.
-2. Abra index.html no celular COM internet.
-3. Toque em PREPARAR PARA USO OFFLINE e espere PRONTO PARA OFFLINE.
-4. Toque em MINHA LOCALIZAÇÃO e autorize o GPS.
-5. Ative modo avião.
-6. Recarregue a página.
-7. Verifique se as ruas continuam aparecendo e se MINHA LOCALIZAÇÃO continua funcionando.
-
-Este protótipo não altera o roteirizador nem o app de motoristas.
+Abra em aba anônima para testar.
+Se aparecer a mensagem:
+  "Mapa TGR 200 km carregado..." = PMTiles funcionou.
+Se aparecer:
+  "Mapa online de segurança ativo..." = o site está funcionando, mas o PMTiles foi bloqueado/falhou.
