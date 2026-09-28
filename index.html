@@ -57,6 +57,11 @@ select{width:100%;font-size:16px;padding:10px;border:1px solid #bbb;border-radiu
 .num{background:#c00000;color:#fff;border:2px solid #fff;border-radius:16px;min-width:34px;height:30px;padding:0 5px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-weight:bold;box-shadow:0 1px 5px #0008}
 .popup{font-size:13px;line-height:1.45;min-width:180px}
 .gps{display:block;text-align:center;text-decoration:none;background:#148a2a;color:white!important;font-weight:bold;padding:9px;margin-top:8px;border-radius:7px}
+.rotaOfflineBtn{display:block;width:100%;border:0;text-align:center;background:#1565c0;color:#fff;font-weight:bold;padding:9px;margin-top:7px;border-radius:7px;cursor:pointer}
+.rotaOfflineBtn:disabled{background:#aaa;cursor:default}
+.prepararNavBtn{display:none;width:100%;margin-top:9px;border:0;border-radius:7px;padding:9px;background:#1565c0;color:#fff;font-size:11px;font-weight:bold;cursor:pointer}
+.prepararNavStatus{display:none;margin-top:5px;font-size:10px;line-height:1.35;color:#666}
+.prepararNavStatus.ok{color:#148a2a;font-weight:bold}.prepararNavStatus.erro{color:#b00000;font-weight:bold}
 @media(max-width:600px){.topo{left:8px;right:auto;top:8px;width:calc(100vw - 16px);max-width:none}}
 .pixTela{position:fixed;inset:0;z-index:12000;background:#f4f4f4;display:none;align-items:flex-start;justify-content:center;padding:18px;box-sizing:border-box;overflow-y:auto}
 .pixCard{width:min(430px,100%);background:#fff;border-radius:16px;padding:22px;box-shadow:0 8px 30px #0003;text-align:center;margin:auto}
@@ -186,6 +191,8 @@ if ('serviceWorker' in navigator) {
   <h2>Rotas TGR</h2>
   <div style="display:none"><select id="placa"><option value="">Selecione a placa...</option></select></div>
   <div id="info" class="info"></div>
+  <button id="prepararNavBtn" class="prepararNavBtn" type="button">BAIXAR ROTA DE NAVEGAÇÃO OFFLINE</button>
+  <div id="prepararNavStatus" class="prepararNavStatus"></div>
 <button id="trocarRota" type="button">VOLTAR</button>
   <div id="pedidos" class="pedidos"></div>
 </div>
@@ -646,6 +653,99 @@ function alternarListaPedidos(){
   atualizarEstadoListaPedidos();
 }
 
+
+let rotaOfflineLayer=L.layerGroup().addTo(map);
+let rotaOfflineAtual=null;
+
+function chaveRotaOffline(placa,p){return 'nav_offline|'+placa+'|'+p.pedido+'|'+p.cliente;}
+
+async function salvarRotaOffline(chave,obj){await salvarDadoLocal(chave,obj);}
+async function lerRotaOffline(chave){try{return await lerDadoLocal(chave);}catch(e){return null;}}
+
+function juntarPassosDaPerna(leg){
+  const coords=[];
+  (leg.steps||[]).forEach(step=>{
+    const c=step&&step.geometry&&step.geometry.coordinates;
+    if(!Array.isArray(c))return;
+    c.forEach(pt=>{
+      if(!Array.isArray(pt)||pt.length<2)return;
+      const ll=[Number(pt[1]),Number(pt[0])];
+      const ult=coords[coords.length-1];
+      if(!ult || ult[0]!==ll[0] || ult[1]!==ll[1])coords.push(ll);
+    });
+  });
+  return coords;
+}
+
+async function obterPosicaoAtualUmaVez(){
+  return new Promise((resolve,reject)=>{
+    if(!navigator.geolocation)return reject(new Error('GPS não disponível.'));
+    navigator.geolocation.getCurrentPosition(
+      p=>resolve([p.coords.latitude,p.coords.longitude]),
+      ()=>reject(new Error('Não foi possível obter a localização atual.')),
+      {enableHighAccuracy:true,maximumAge:5000,timeout:20000}
+    );
+  });
+}
+
+async function prepararNavegacaoOffline(placa){
+  const btn=document.getElementById('prepararNavBtn');
+  const st=document.getElementById('prepararNavStatus');
+  if(!navigator.onLine){st.style.display='block';st.className='prepararNavStatus erro';st.textContent='Conecte à internet para preparar a navegação.';return;}
+  const itens=dados.filter(x=>x.rota===placa);
+  if(!itens.length)return;
+  btn.disabled=true;btn.textContent='PREPARANDO NAVEGAÇÃO...';
+  st.style.display='block';st.className='prepararNavStatus';st.textContent='Obtendo GPS e calculando o caminho pelas ruas...';
+  try{
+    const inicio=await obterPosicaoAtualUmaVez();
+    const pontos=[inicio,...itens.map(p=>[p.lat,p.lon])];
+    const coord=pontos.map(x=>x[1]+','+x[0]).join(';');
+    const url='https://router.project-osrm.org/route/v1/driving/'+coord+'?steps=true&geometries=geojson&overview=false';
+    const r=await fetch(url,{cache:'no-store'});
+    if(!r.ok)throw new Error('serviço de rotas HTTP '+r.status);
+    const j=await r.json();
+    if(j.code!=='Ok'||!j.routes||!j.routes[0])throw new Error('não foi possível calcular o trajeto');
+    const legs=j.routes[0].legs||[];
+    if(legs.length<itens.length)throw new Error('trajeto incompleto');
+    for(let i=0;i<itens.length;i++){
+      const coords=juntarPassosDaPerna(legs[i]);
+      if(coords.length<2)continue;
+      await salvarRotaOffline(chaveRotaOffline(placa,itens[i]),{
+        coords,
+        distance:Number(legs[i].distance)||0,
+        duration:Number(legs[i].duration)||0,
+        salvoEm:new Date().toISOString(),
+        origem:i===0?'GPS no momento do download':'cliente anterior'
+      });
+    }
+    st.className='prepararNavStatus ok';
+    st.textContent='NAVEGAÇÃO OFFLINE PRONTA ✓ '+itens.length+' trecho(s) salvos neste aparelho.';
+    btn.textContent='ATUALIZAR ROTA DE NAVEGAÇÃO OFFLINE';
+    renderMapa(placa);
+  }catch(e){
+    console.error(e);st.className='prepararNavStatus erro';st.textContent='Falha ao preparar navegação: '+(e.message||e);
+    btn.textContent='TENTAR BAIXAR NAVEGAÇÃO OFFLINE';
+  }finally{btn.disabled=false;}
+}
+
+function abrirRotaOfflinePorChave(pedido,cliente){
+  const p=dados.find(x=>x.rota===select.value && String(x.pedido)===String(pedido) && String(x.cliente)===String(cliente));
+  if(p)return abrirRotaOffline(p);
+}
+async function abrirRotaOffline(p){
+  const placa=select.value;
+  const salvo=await lerRotaOffline(chaveRotaOffline(placa,p));
+  if(!salvo||!Array.isArray(salvo.coords)||salvo.coords.length<2){
+    alert('Este trecho ainda não foi preparado para uso offline. Com internet, toque em "BAIXAR ROTA DE NAVEGAÇÃO OFFLINE".');
+    return;
+  }
+  rotaOfflineLayer.clearLayers();
+  const linha=L.polyline(salvo.coords,{weight:6,opacity:.85}).addTo(rotaOfflineLayer);
+  rotaOfflineAtual=salvo;
+  map.fitBounds(linha.getBounds(),{padding:[35,35]});
+  const m=marcadoresPorPedido.get(chaveMarcador(p)); if(m)m.openPopup();
+}
+
 function renderPedidos(placa){
   const box=document.getElementById('pedidos');
   if(!placa){box.style.display='none';box.innerHTML='';return;}
@@ -717,7 +817,8 @@ function renderMapa(placa){
       '<b>Código do cliente:</b> '+esc(p.cliente)+'<br>'+
       '<b>Pedido:</b> '+esc(p.pedido)+'<br>'+
       '<b>Peso:</b> '+esc(p.peso)+' kg<br>'+
-      '<a class="gps" target="_blank" rel="noopener" href="'+esc(gps)+'">ABRIR NO GPS</a></div>';
+      '<a class="gps" target="_blank" rel="noopener" href="'+esc(gps)+'">ABRIR NO GPS</a>'+
+      '<button class="rotaOfflineBtn" type="button" onclick="abrirRotaOfflinePorChave(\''+esc(p.pedido)+'\',\''+esc(p.cliente)+'\')">ROTA OFFLINE</button></div>';
 
     const marcador=L.marker([latVisual,lonVisual],{icon}).bindPopup(popup).addTo(layer);
     marcadoresPorPedido.set(chaveMarcador(p),marcador);
@@ -729,7 +830,7 @@ function renderMapa(placa){
 select.addEventListener('change',()=>{
   const placa=select.value;
   const info=document.getElementById('info');
-  if(!placa){info.style.display='none';renderPedidos('');renderMapa('');return;}
+  if(!placa){info.style.display='none';const nb=document.getElementById('prepararNavBtn');if(nb)nb.style.display='none';const ns=document.getElementById('prepararNavStatus');if(ns)ns.style.display='none';rotaOfflineLayer.clearLayers();renderPedidos('');renderMapa('');return;}
   const itens=dados.filter(x=>x.rota===placa);
   if(!itens.length)return;
   const motorista=itens[0].motorista||'Não informado';
@@ -739,6 +840,11 @@ select.addEventListener('change',()=>{
     '<br><b>Peso total:</b> '+peso.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+' kg'+
     '<br><b>Cidade'+(cidades.length>1?'s':'')+':</b> '+(cidades.length?cidades.map(esc).join(', '):'Não informada');
   info.style.display='block';
+  const navBtn=document.getElementById('prepararNavBtn');
+  const navSt=document.getElementById('prepararNavStatus');
+  if(navBtn){navBtn.style.display='block';navBtn.onclick=()=>prepararNavegacaoOffline(placa);}
+  if(navSt){navSt.style.display='none';navSt.textContent='';}
+  rotaOfflineLayer.clearLayers();
 
   renderPedidos(placa);
   renderMapa(placa);
