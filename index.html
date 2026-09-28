@@ -156,7 +156,7 @@ select{width:100%;font-size:16px;padding:10px;border:1px solid #bbb;border-radiu
 <script>
 // TGR Offline V2 - registra o Service Worker assim que possível.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=2').catch(console.warn));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=3').catch(console.warn));
 }
 </script>
 </head>
@@ -737,7 +737,7 @@ document.addEventListener('DOMContentLoaded',function(){
   const texto=document.getElementById('downloadTexto');
   const ultima=document.getElementById('downloadUltimaAtualizacao');
   const CHAVE='tgrUltimaAtualizacaoOfflineV2';
-  const CACHE='tgr-rota-offline-v2';
+  const CACHE='tgr-rota-offline-v3';
   const LOCAIS=['./','./index.html','./rotas.csv','./pix.csv','./Base de Clientes.xlsx'];
   const EXTERNOS=[
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
@@ -777,7 +777,10 @@ document.addEventListener('DOMContentLoaded',function(){
       if(texto)texto.textContent='Baixando mapa: '+(recebido/1048576).toFixed(1)+' / '+(total/1048576).toFixed(1)+' MB';
     }
     const blob=new Blob(partes,{type:'application/octet-stream'});
-    const headers=new Headers(resp.headers); headers.set('Content-Length',String(blob.size)); headers.set('Accept-Ranges','bytes');
+    const headers=new Headers();
+    headers.set('Content-Type','application/octet-stream');
+    headers.set('Content-Length',String(blob.size));
+    headers.set('Accept-Ranges','bytes');
     await cache.put(new Request(new URL('./mapa_tgr_200km.pmtiles',location.href).href),new Response(blob,{status:200,headers}));
     if(barra)barra.style.width='100%';
   }
@@ -787,7 +790,7 @@ document.addEventListener('DOMContentLoaded',function(){
     b.disabled=true;b.classList.remove('pronto','falha');b.classList.add('baixando');b.textContent='BAIXANDO DADOS...';
     if(box)box.style.display='block'; if(barra)barra.style.width='2%';
     try{
-      if('serviceWorker' in navigator){await navigator.serviceWorker.register('./sw.js?v=2');await navigator.serviceWorker.ready;}
+      if('serviceWorker' in navigator){await navigator.serviceWorker.register('./sw.js?v=3');await navigator.serviceWorker.ready;}
       const cache=await caches.open(CACHE);
       await guardar(cache,'./index.html','aplicativo',8);
       await guardar(cache,'./rotas.csv','rotas',18);
