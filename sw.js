@@ -1,4 +1,4 @@
-const CACHE='tgr-rota-offline-v3';
+const CACHE='tgr-rota-offline-v4';
 const PM='mapa_tgr_200km.pmtiles';
 
 self.addEventListener('install',event=>{
