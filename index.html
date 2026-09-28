@@ -449,7 +449,7 @@ function preencherPlacas(){
   }
 }
 
-const map=L.map('map',{maxZoom:19}).setView([-11.30,-41.85],9);
+const map=L.map('map',{maxZoom:19,closePopupOnClick:false}).setView([-11.30,-41.85],9);
 
 let mapaBaseTGR=null;
 let mapaUsandoFallback=false;
@@ -511,9 +511,15 @@ const select=document.getElementById('placa');
 
 map.on('click',()=>{
   if(select.value && !pedidosMinimizados){
+    // Primeiro toque no mapa: apenas minimiza a lista.
+    // O popup do cliente selecionado permanece aberto.
     pedidosMinimizados=true;
     atualizarEstadoListaPedidos();
+    return;
   }
+  // Com a lista já minimizada, um novo toque no mapa volta a ter
+  // o comportamento natural de fechar as informações do cliente.
+  map.closePopup();
 });
 
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
