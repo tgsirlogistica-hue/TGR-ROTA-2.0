@@ -689,7 +689,7 @@ function alternarListaPedidos(){
 function renderPedidos(placa){
   const box=document.getElementById('pedidos');
   if(!placa){box.style.display='none';box.innerHTML='';return;}
-  const itens=dados.filter(x=>x.rota===placa);
+  const itens=dados.filter(x=>x.rota===placa).sort((a,b)=>Number(Boolean(atendimentoCliente(b.cliente)))-Number(Boolean(atendimentoCliente(a.cliente))));
   box.innerHTML='<div class="pedidosCabecalho">'+
     '<div class="pedidosTitulo">Pedidos da rota</div>'+
     '<button type="button" class="togglePedidos" aria-expanded="'+String(!pedidosMinimizados)+'">'+(pedidosMinimizados?'MOSTRAR':'MINIMIZAR')+'</button>'+
