@@ -456,6 +456,8 @@ async function carregarRotas(){
     );
 
     preencherPlacas();
+    tgrImportarRotas();
+    tgrSincronizar();
   }catch(erro){
     const tela=document.getElementById('telaInicial');
     if(tela){
@@ -671,6 +673,85 @@ map.on('click',()=>{
 
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function pesoNum(v){return Number(String(v??'0').replace(',','.'))||0;}
+
+// ===== INTEGRAÇÃO GOOGLE PLANILHAS (TGR) =====
+// Cole abaixo a URL da implantação do Apps Script terminada em /exec.
+const TGR_PLANILHA_URL = 'https://script.google.com/macros/s/AKfycbyQ21KlUOM10Qa25BneD2NLtXJp37ebEkMjYKrPSvJzWNnr-wGGu6VVAyKE7ZjE3GfJ/exec';
+const TGR_FILA_CHAVE = 'tgr_planilha_fila_v1';
+const TGR_DATA_CHAVE = 'tgr_data_programacao_v1';
+const TGR_ENVIADOS_CHAVE = 'tgr_planilha_importacao_v1';
+let tgrSincronizando = false;
+function tgrDataLocal(){
+  const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function tgrDataProgramacao(){
+  // A programação é identificada pelo dia em que foi carregada. O GPS original
+  // não recebe uma coluna de data em rotas.csv.
+  return localStorage.getItem(TGR_DATA_CHAVE)||tgrDataLocal();
+}
+function tgrIntegracaoAtiva(){return /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec/.test(TGR_PLANILHA_URL);}
+function tgrFila(){try{return JSON.parse(localStorage.getItem(TGR_FILA_CHAVE)||'[]')}catch(e){return []}}
+function tgrSalvarFila(f){localStorage.setItem(TGR_FILA_CHAVE,JSON.stringify(f));}
+function tgrRegistro(p,status){
+  return {data:tgrDataProgramacao(),rota:p.rota,pedido:p.pedido,cliente:p.cliente,
+    motorista:p.motorista||'',cidade:p.cidade||'',ordem:Number.isFinite(p.ordem)?p.ordem:'',
+    status:status==='atendido'?'ATENDIDO':'PENDENTE',alteradoEm:new Date().toISOString()};
+}
+function tgrEnfileirar(registros){
+  const fila=tgrFila();
+  for(const registro of registros){
+    const chave=[registro.data,registro.rota,registro.pedido,registro.cliente].join('|');
+    const indice=fila.findIndex(x=>[x.data,x.rota,x.pedido,x.cliente].join('|')===chave);
+    if(indice>=0)fila.splice(indice,1);
+    fila.push(registro);
+  }
+  tgrSalvarFila(fila);
+  if(navigator.onLine)tgrSincronizar();
+}
+function tgrJSONP(registros){
+  return new Promise((resolve,reject)=>{
+    const callback='tgrCb'+Math.random().toString(36).slice(2);
+    const script=document.createElement('script');
+    const timeout=setTimeout(()=>fim(new Error('Tempo esgotado')),25000);
+    function fim(erro,valor){clearTimeout(timeout);delete window[callback];script.remove();erro?reject(erro):resolve(valor);}
+    window[callback]=res=>res&&res.ok?fim(null,res):fim(new Error(res&&res.error||'Falha no Apps Script'));
+    script.onerror=()=>fim(new Error('Sem conexão com Apps Script'));
+    script.src=TGR_PLANILHA_URL+'?callback='+encodeURIComponent(callback)+'&registros='+encodeURIComponent(JSON.stringify(registros))+'&_='+Date.now();
+    document.head.appendChild(script);
+  });
+}
+async function tgrSincronizar(){
+  if(tgrSincronizando||!tgrIntegracaoAtiva()||!navigator.onLine)return;
+  tgrSincronizando=true;
+  try{
+    let fila=tgrFila();
+    while(fila.length&&navigator.onLine){
+      // Lotes pequenos para respeitar limites de URL e evitar perda de alterações.
+      const lote=fila.slice(0,4);
+      await tgrJSONP(lote);
+      // Nunca descartar uma alteração mais nova registrada durante o envio.
+      const ids=new Set(lote.map(x=>JSON.stringify(x)));
+      tgrSalvarFila(tgrFila().filter(x=>!ids.has(JSON.stringify(x))));
+      fila=tgrFila();
+    }
+  }catch(e){console.warn('TGR: registros aguardando sincronização:',e.message);}
+  finally{tgrSincronizando=false;}
+}
+function tgrImportarRotas(){
+  if(!dados.length)return;
+  const data=tgrDataLocal();
+  const assinatura=data+'|'+dados.map(p=>[p.rota,p.pedido,p.cliente].join(':')).sort().join(';');
+  // Não reimporta a mesma programação toda vez que o link é aberto.
+  if(localStorage.getItem(TGR_ENVIADOS_CHAVE)===assinatura)return;
+  localStorage.setItem(TGR_DATA_CHAVE,data);
+  localStorage.setItem(TGR_ENVIADOS_CHAVE,assinatura);
+  tgrEnfileirar(dados.map(p=>tgrRegistro(p,getStatus(p))));
+}
+window.addEventListener('online',tgrSincronizar);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)tgrSincronizar();});
+setInterval(tgrSincronizar,60000);
+// ===== FIM INTEGRAÇÃO =====
+
 function chaveStatus(p){return 'statusPedidoTGR|'+p.rota+'|'+p.pedido+'|'+p.cliente;}
 function getStatus(p){return localStorage.getItem(chaveStatus(p)) || 'pendente';}
 function chaveMarcador(p){return p.rota+'|'+p.pedido+'|'+p.cliente;}
@@ -686,6 +767,7 @@ function focarPedido(p){
 function alternarStatus(p){
   const novo=getStatus(p)==='atendido'?'pendente':'atendido';
   localStorage.setItem(chaveStatus(p),novo);
+  tgrEnfileirar([tgrRegistro(p,novo)]);
   renderPedidos(select.value);
   renderMapa(select.value);
 }
